@@ -36,7 +36,6 @@
       cursor: pointer;
       z-index: 20;
     }
-
     #restartBtn {
       padding: 12px 24px;
       font-size: 30px;
@@ -71,8 +70,9 @@
 
   <button id="startGameBtn">▶️ Start Game</button>
   <button id="restartBtn">🔁 Restart Game</button>
-  <canvas id="gameCanvas"></canvas>
   <button id="pauseBtn">⏸ Pause</button>
+
+  <canvas id="gameCanvas"></canvas>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -265,45 +265,42 @@
       }
     });
 
-    // Touch controls: swipe and tap
-    let touchStartX = null;
-    let touchEndX = null;
+    // ✅ Swipe & Tap Support
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
 
-    canvas.addEventListener('touchstart', e => {
+    canvas.addEventListener("touchstart", (e) => {
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    });
 
-        // Tap to jump
+    canvas.addEventListener("touchend", (e) => {
+      touchEndX = e.changedTouches[0].clientX;
+      touchEndY = e.changedTouches[0].clientY;
+
+      const dx = touchEndX - touchStartX;
+      const dy = touchEndY - touchStartY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      const threshold = 30;
+
+      if (absDx > threshold && absDx > absDy) {
+        if (dx > 0) {
+          player.x = Math.min(canvas.width - player.w, player.x + 50); // Swipe Right
+        } else {
+          player.x = Math.max(0, player.x - 50); // Swipe Left
+        }
+      } else if (absDx < threshold && absDy < threshold) {
         if (player.grounded) {
           player.dy = -20;
           player.grounded = false;
           if (loadedAssets.jump) loadedAssets.jump.play();
         }
       }
-    });
-
-    canvas.addEventListener('touchmove', e => {
-      if (e.touches.length === 1) {
-        touchEndX = e.touches[0].clientX;
-      }
-    });
-
-    canvas.addEventListener('touchend', () => {
-      if (touchStartX !== null && touchEndX !== null) {
-        const dx = touchEndX - touchStartX;
-
-        if (Math.abs(dx) > 50) {
-          if (dx > 0) {
-            // Swipe Right
-            player.x = Math.min(canvas.width - player.w, player.x + 50);
-          } else {
-            // Swipe Left
-            player.x = Math.max(0, player.x - 50);
-          }
-        }
-      }
-      touchStartX = null;
-      touchEndX = null;
     });
 
     restartBtn.addEventListener('click', startGame);
