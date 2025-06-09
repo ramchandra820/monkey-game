@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jungle Monkey Dash</title>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+
+    #loadingScreen {
+      position: absolute;
+      width: 100vw; height: 100vh;
+      background: black; color: limegreen;
+      display: flex; justify-content: center; align-items: center;
+      font-size: 24px; font-family: monospace;
+      z-index: 10;
+    }
+
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      color: white; font-family: monospace; font-size: 28px;
+      z-index: 2;
+    }
+
+    #restartBtn, #startGameBtn {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 16px 32px;
+      font-size: 26px;
+      font-family: monospace;
+      background: limegreen;
+      color: black;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      z-index: 20;
+    }
+    #restartBtn {
+      padding: 12px 24px;
+      font-size: 30px;
+      z-index: 11;
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingScreen">Loading... 0%</div>
+
+  <div id="info">
+    Apples Collected: <span id="score">0</span>
+    <img src="apple.png" alt="Apple" style="width: 40px; height: 40px; vertical-align: middle; margin-left: 5px;">
+    <br>
+    High Score: <span id="highScore">0</span>
+  </div>
+
+  <button id="startGameBtn">▶️ Start Game</button>
+  <button id="restartBtn">🔁 Restart Game</button>
+
+  <canvas id="gameCanvas"></canvas>
+  <button id="pauseBtn" style="
+    position: absolute; 
+    top: 10px; 
+    right: 10px; 
+    z-index: 10;
+    padding: 8px 16px;
+    font-size: 20px;
+    font-family: monospace;
+    background: orange;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    display: none;
+  ">⏸ Pause</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const loadingScreen = document.getElementById("loadingScreen");
+    const restartBtn = document.getElementById("restartBtn");
+    const startGameBtn = document.getElementById("startGameBtn");
+    const scoreElement = document.getElementById("score");
+    const highScoreElement = document.getElementById("highScore");
+    const pauseBtn = document.getElementById("pauseBtn");
+
+    restartBtn.style.display = "none"; // hide restart button initially
+
+    const assets = {
+      background: { src: "jungle-bg.png", type: "image" },
+      player: { src: "monkey.png", type: "image" },
+      apple: { src: "apple.png", type: "image" },
+      stone: { src: "stone.png", type: "image" },
+      jump: { src: "jump.mp3", type: "audio" },
+      collect: { src: "eat.mp3", type: "audio" },
+      hit: { src: "hit.mp3", type: "audio" },
+      backgroundMusic: { src: "bg-music.mp3", type: "audio" },
+      // gameover: { src: "gameover.mp3", type: "audio" } // optional
+    };
+
+    const loadedAssets = {};
+    let loadedCount = 0;
+    const totalAssets = Object.keys(assets).length;
+
+    function updateLoadingScreen() {
+      const percent = Math.floor((loadedCount / totalAssets) * 100);
+      loadingScreen.innerText = `Loading... ${percent}%`;
+      if (loadedCount === totalAssets) {
+        loadingScreen.style.display = "none";
+      }
+    }
+
+    function loadAssets() {
+      for (const [key, asset] of Object.entries(assets)) {
+        if (asset.type === "image") {
+          const img = new Image();
+          img.onload = () => { loadedAssets[key] = img; loadedCount++; updateLoadingScreen(); };
+          img.onerror = () => console.error(`Failed to load image: ${asset.src}`);
+          img.src = asset.src;
+        } else if (asset.type === "audio") {
+          const audio = new Audio();
+          audio.oncanplaythrough = () => { loadedAssets[key] = audio; loadedCount++; updateLoadingScreen(); };
+          audio.onerror = () => console.error(`Failed to load audio: ${asset.src}`);
+          audio.src = asset.src;
+        }
+      }
+    }
+
+    loadAssets();
+
+    let animationId;
+    let score = 0;
+    let highScore = localStorage.getItem('highScore') || 0;
+    highScoreElement.innerText = highScore;
+    let speed = 6;
+    let bgY = 0;
+    let player, obstacles, apples;
+    let isPaused = false;
+
+    function startGame() {
+      restartBtn.style.display = "none";
+      score = 0;
+      speed = 6;
+      bgY = 0;
+      scoreElement.innerText = score;
+      startGameBtn.style.display = "none";
+      player = { x: canvas.width / 2 - 25, y: canvas.height - 120, w: 120, h: 120, dy: 0, grounded: true };
+      obstacles = [];
+      apples = [];
+
+      clearInterval(window.spawnObstacleTimer);
+      clearInterval(window.spawnAppleTimer);
+      window.spawnObstacleTimer = setInterval(spawnObstacle, 1500);
+      window.spawnAppleTimer = setInterval(spawnApple, 2500);
+
+      if (loadedAssets.backgroundMusic) {
+        loadedAssets.backgroundMusic.loop = true;
+        loadedAssets.backgroundMusic.volume = 0.5;
+        loadedAssets.backgroundMusic.currentTime = 0;
+        loadedAssets.backgroundMusic.play().catch(() => {});
+      }
+
+      pauseBtn.innerText = "⏸ Pause";
+      pauseBtn.style.display = "block";
+      isPaused = false;
+
+      update();
+    }
+
+    function spawnObstacle() {
+      obstacles.push({ x: Math.random() * (canvas.width - 60), y: -100, w: 100, h: 100 });
+    }
+
+    function spawnApple() {
+      apples.push({ x: Math.random() * (canvas.width - 30) + 15, y: -20 , w:100 , h:100 });
+    }
+
+    function drawBackground() {
+      bgY += speed / 2;
+      if (bgY >= canvas.height) bgY = 0;
+      ctx.drawImage(loadedAssets.background, 0, bgY - canvas.height, canvas.width, canvas.height);
+      ctx.drawImage(loadedAssets.background, 0, bgY, canvas.width, canvas.height);
+    }
+
+    function drawPlayer() {
+      ctx.drawImage(loadedAssets.player, player.x, player.y, player.w, player.h);
+    }
+
+    function drawObstacles() {
+      obstacles.forEach(o => {
+        o.y += speed;
+        ctx.drawImage(loadedAssets.stone, o.x, o.y, o.w, o.h);
+      });
+    }
+
+    function drawApples() {
+      apples.forEach(c => {
+        c.y += speed;
+        ctx.drawImage(loadedAssets.apple, c.x - 30, c.y - 30, 70, 70);
+      });
+    }
+
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+
+      player.dy += 1;
+      player.y += player.dy;
+      if (player.y >= canvas.height - 120) {
+        player.y = canvas.height - 120;
+        player.dy = 0;
+        player.grounded = true;
+      }
+
+      drawPlayer();
+      drawObstacles();
+      drawApples();
+
+      for (let o of obstacles) {
+        if (player.x < o.x + o.w && player.x + player.w > o.x &&
+            player.y < o.y + o.h && player.y + player.h > o.y) {
+          if (loadedAssets.hit) loadedAssets.hit.play();
+          if (loadedAssets.backgroundMusic) {
+            loadedAssets.backgroundMusic.pause();
+            loadedAssets.backgroundMusic.currentTime = 0;
+          }
+
+          cancelAnimationFrame(animationId);
+          clearInterval(window.spawnObstacleTimer);
+          clearInterval(window.spawnAppleTimer);
+          setTimeout(() => restartBtn.style.display = "block", 300);
+          return;
+        }
+      }
+
+      for (let i = apples.length - 1; i >= 0; i--) {
+        const c = apples[i];
+        let dx = player.x + player.w / 2 - c.x;
+        let dy = player.y + player.h / 2 - c.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 40) {
+          apples.splice(i, 1);
+          score += 10;
+          scoreElement.innerText = score;
+          if (score > highScore) {
+            highScore = score;
+            highScoreElement.innerText = highScore;
+            localStorage.setItem("highScore", highScore);
+          }
+          if (loadedAssets.collect) loadedAssets.collect.play();
+        }
+      }
+
+      animationId = requestAnimationFrame(update);
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') player.x = Math.max(0, player.x - 50);
+      if (e.key === 'ArrowRight') player.x = Math.min(canvas.width - player.w, player.x + 50);
+      if (e.key === 'ArrowUp' && player.grounded) {
+        player.dy = -20;
+        player.grounded = false;
+        if (loadedAssets.jump) loadedAssets.jump.play();
+      }
+    });
+
+    canvas.addEventListener('touchstart', () => {
+      if (player.grounded) {
+        player.dy = -20;
+        player.grounded = false;
+        if (loadedAssets.jump) loadedAssets.jump.play();
+      }
+    });
+
+    restartBtn.addEventListener('click', startGame);
+    startGameBtn.addEventListener('click', startGame);
+
+    pauseBtn.addEventListener("click", () => {
+      if (!isPaused) {
+        cancelAnimationFrame(animationId);
+        if (loadedAssets.backgroundMusic) loadedAssets.backgroundMusic.pause();
+        pauseBtn.innerText = "▶️ Resume";
+        isPaused = true;
+      } else {
+        isPaused = false;
+        if (loadedAssets.backgroundMusic) loadedAssets.backgroundMusic.play();
+        pauseBtn.innerText = "⏸ Pause";
+        update();
+      }
+    });
+  </script>
+</body>
+</html>
