@@ -36,10 +36,26 @@
       cursor: pointer;
       z-index: 20;
     }
+
     #restartBtn {
       padding: 12px 24px;
       font-size: 30px;
       z-index: 11;
+    }
+
+    #pauseBtn {
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      z-index: 10;
+      padding: 8px 16px;
+      font-size: 20px;
+      font-family: monospace;
+      background: orange;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: none;
     }
   </style>
 </head>
@@ -55,22 +71,8 @@
 
   <button id="startGameBtn">▶️ Start Game</button>
   <button id="restartBtn">🔁 Restart Game</button>
-
   <canvas id="gameCanvas"></canvas>
-  <button id="pauseBtn" style="
-    position: absolute; 
-    top: 10px; 
-    right: 10px; 
-    z-index: 10;
-    padding: 8px 16px;
-    font-size: 20px;
-    font-family: monospace;
-    background: orange;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    display: none;
-  ">⏸ Pause</button>
+  <button id="pauseBtn">⏸ Pause</button>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
@@ -85,7 +87,7 @@
     const highScoreElement = document.getElementById("highScore");
     const pauseBtn = document.getElementById("pauseBtn");
 
-    restartBtn.style.display = "none"; // hide restart button initially
+    restartBtn.style.display = "none";
 
     const assets = {
       background: { src: "jungle-bg.png", type: "image" },
@@ -95,8 +97,7 @@
       jump: { src: "jump.mp3", type: "audio" },
       collect: { src: "eat.mp3", type: "audio" },
       hit: { src: "hit.mp3", type: "audio" },
-      backgroundMusic: { src: "bg-music.mp3", type: "audio" },
-      // gameover: { src: "gameover.mp3", type: "audio" } // optional
+      backgroundMusic: { src: "bg-music.mp3", type: "audio" }
     };
 
     const loadedAssets = {};
@@ -264,12 +265,45 @@
       }
     });
 
-    canvas.addEventListener('touchstart', () => {
-      if (player.grounded) {
-        player.dy = -20;
-        player.grounded = false;
-        if (loadedAssets.jump) loadedAssets.jump.play();
+    // Touch controls: swipe and tap
+    let touchStartX = null;
+    let touchEndX = null;
+
+    canvas.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+
+        // Tap to jump
+        if (player.grounded) {
+          player.dy = -20;
+          player.grounded = false;
+          if (loadedAssets.jump) loadedAssets.jump.play();
+        }
       }
+    });
+
+    canvas.addEventListener('touchmove', e => {
+      if (e.touches.length === 1) {
+        touchEndX = e.touches[0].clientX;
+      }
+    });
+
+    canvas.addEventListener('touchend', () => {
+      if (touchStartX !== null && touchEndX !== null) {
+        const dx = touchEndX - touchStartX;
+
+        if (Math.abs(dx) > 50) {
+          if (dx > 0) {
+            // Swipe Right
+            player.x = Math.min(canvas.width - player.w, player.x + 50);
+          } else {
+            // Swipe Left
+            player.x = Math.max(0, player.x - 50);
+          }
+        }
+      }
+      touchStartX = null;
+      touchEndX = null;
     });
 
     restartBtn.addEventListener('click', startGame);
